@@ -1,0 +1,13 @@
+# Local Configuration Secrets
+.env
+
+# Go Build Caches & Test Files
+*_test.go
+.golangci.yml
+
+# Git Version Control Bloat
+.git
+.gitignore
+
+# Mac System Junk Files
+.DS_Store
