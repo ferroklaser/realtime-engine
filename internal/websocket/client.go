@@ -1,7 +1,9 @@
 package websocket
 
 import (
+	"encoding/json"
 	"log"
+	"realtime/internal/types"
 
 	"github.com/gorilla/websocket"
 )
@@ -9,7 +11,7 @@ import (
 type Client struct {
 	Hub  *Hub
 	Conn *websocket.Conn
-	Send chan []byte
+	Send chan types.Message
 }
 
 func (client *Client) ReadPump() {
@@ -20,12 +22,20 @@ func (client *Client) ReadPump() {
 
 	for {
 		// server reads message from user
-		_, message, err := client.Conn.ReadMessage()
+		_, jsonData, err := client.Conn.ReadMessage()
 
 		if err != nil {
 			break
 		}
-		log.Printf("Server received: %s", message)
+
+		var message types.Message
+		err2 := json.Unmarshal(jsonData, &message)
+
+		if err2 != nil {
+			log.Printf("Error unmarshaling JSON: %s", err2)
+		}
+
+		log.Printf("Server received: message")
 		client.Hub.Broadcasts <- message
 	}
 }
@@ -42,10 +52,15 @@ func (client *Client) WritePump() {
 			client.Conn.WriteMessage(websocket.CloseMessage, []byte{})
 			return
 		}
-
-		err := client.Conn.WriteMessage(websocket.TextMessage, message)
+		jsonData, err := json.Marshal(message)
 
 		if err != nil {
+			log.Printf("Error marshaling JSON: %v", err)
+		}
+
+		err2 := client.Conn.WriteMessage(websocket.TextMessage, jsonData)
+
+		if err2 != nil {
 			return
 		}
 	}
