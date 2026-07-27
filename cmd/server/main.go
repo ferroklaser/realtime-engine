@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
+	"realtime/internal/types"
 	ws "realtime/internal/websocket"
 
 	"github.com/gorilla/websocket"
@@ -34,7 +36,7 @@ func wsHandler(hub *ws.Hub, w http.ResponseWriter, r *http.Request) {
 	client := &ws.Client{
 		Hub:  hub,
 		Conn: conn,
-		Send: make(chan []byte, 256),
+		Send: make(chan types.Message, 256),
 	}
 
 	client.Hub.Register <- client
@@ -87,7 +89,15 @@ func listenToRedis(hub *ws.Hub, cfg *Config) {
 			continue
 		}
 
-		hub.Broadcasts <- []byte(msg.Payload)
+		var message types.Message
+		err2 := json.Unmarshal([]byte(msg.Payload), &message)
+
+		if err2 != nil {
+			log.Printf("Redis unmarshalling error: %v", err2)
+			continue
+		}
+
+		hub.Broadcasts <- message
 	}
 }
 

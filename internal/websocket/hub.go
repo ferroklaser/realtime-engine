@@ -21,7 +21,7 @@ func NewHub() *Hub {
 	}
 }
 
-func (hub Hub) Run() {
+func (hub *Hub) Run() {
 	for {
 		select {
 		case client := <-hub.Register:
@@ -33,7 +33,7 @@ func (hub Hub) Run() {
 				close(client.Send)
 			}
 		case msg := <-hub.Broadcasts:
-			log.Printf("Hub is broadcasting: %s", msg)
+			log.Printf("Hub is broadcasting")
 			for client := range hub.Clients {
 				select {
 				case client.Send <- msg:
