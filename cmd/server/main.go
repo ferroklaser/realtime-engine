@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"realtime/internal/streams"
 	"realtime/internal/types"
 	ws "realtime/internal/websocket"
 
@@ -97,6 +98,11 @@ func listenToRedis(hub *ws.Hub, cfg *Config) {
 			continue
 		}
 
+		err3 := streams.SaveToStream(ctx, rdb, cfg.RedisStream, message)
+		if err3 != nil {
+			log.Printf("Redis stream saving error: %v", err3)
+		}
+
 		hub.Broadcasts <- message
 	}
 }
@@ -105,6 +111,7 @@ type Config struct {
 	Port         string
 	RedisAddr    string
 	RedisChannel string
+	RedisStream  string
 }
 
 func LoadConfig() *Config {
@@ -123,10 +130,16 @@ func LoadConfig() *Config {
 		redisChannel = "global_activity"
 	}
 
+	redisStream := os.Getenv("REDIS_STREAM")
+	if redisStream == "" {
+		redisStream = "message_history"
+	}
+
 	cfg := &Config{
 		Port:         port,
 		RedisAddr:    redisAddr,
 		RedisChannel: redisChannel,
+		RedisStream:  redisStream,
 	}
 
 	return cfg
