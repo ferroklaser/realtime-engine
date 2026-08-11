@@ -33,3 +33,22 @@ func SaveToStream(ctx context.Context, rdb *redis.Client, stream string, msg typ
 
 	return nil
 }
+
+func ReadFromStream(ctx context.Context, rdb *redis.Client, stream string, limit int64) ([]types.Message, error) {
+	msgs, err := rdb.XRevRangeN(
+		ctx,
+		stream,
+		"+",
+		"-",
+		limit,
+	).Result()
+
+	if err != nil {
+		log.Println("Error reading stream")
+		return nil, err
+	}
+
+	for message := range msgs {
+
+	}
+}
