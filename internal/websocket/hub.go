@@ -1,10 +1,13 @@
 package websocket
 
-import "log"
+import (
+	"log"
+	"realtime/internal/types"
+)
 
 type Hub struct {
 	Clients    map[*Client]bool
-	Broadcasts chan []byte
+	Broadcasts chan types.Message
 	Register   chan *Client
 	UnRegister chan *Client
 }
@@ -12,13 +15,13 @@ type Hub struct {
 func NewHub() *Hub {
 	return &Hub{
 		Clients:    make(map[*Client]bool),
-		Broadcasts: make(chan []byte),
+		Broadcasts: make(chan types.Message),
 		Register:   make(chan *Client),
 		UnRegister: make(chan *Client),
 	}
 }
 
-func (hub Hub) Run() {
+func (hub *Hub) Run() {
 	for {
 		select {
 		case client := <-hub.Register:
@@ -30,7 +33,7 @@ func (hub Hub) Run() {
 				close(client.Send)
 			}
 		case msg := <-hub.Broadcasts:
-			log.Printf("Hub is broadcasting: %s", msg)
+			log.Printf("Hub is broadcasting")
 			for client := range hub.Clients {
 				select {
 				case client.Send <- msg:
