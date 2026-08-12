@@ -9,6 +9,7 @@ import (
 	"realtime/internal/streams"
 	"realtime/internal/types"
 	ws "realtime/internal/websocket"
+	"strconv"
 
 	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
@@ -54,13 +55,44 @@ func main() {
 
 	cfg := LoadConfig()
 	hub := ws.NewHub()
+	ctx := context.Background()
+	rdb := redis.NewClient(&redis.Options{
+		Addr: cfg.RedisAddr,
+	})
 
 	go hub.Run()
-	go listenToRedis(hub, cfg)
+	go listenToRedis(ctx, rdb, hub, cfg)
 
 	// define /ws route, when someone visits, run handler
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		wsHandler(hub, w, r)
+	})
+
+	http.HandleFunc("/history", func(w http.ResponseWriter, r *http.Request) {
+		limit := int64(20)
+
+		limit_str := r.URL.Query().Get("limit")
+
+		if limit_str != "" {
+			parsedLimit, err := strconv.ParseInt(limit_str, 10, 64)
+
+			if err != nil {
+				http.Error(w, "invalid limit", http.StatusBadRequest)
+				return
+			}
+
+			limit = parsedLimit
+		}
+
+		messages, err2 := streams.ReadFromStream(r.Context(), rdb, cfg.RedisStream, limit)
+
+		if err2 != nil {
+			http.Error(w, "unable to read history", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(messages)
 	})
 
 	// start the server
@@ -70,13 +102,7 @@ func main() {
 	}
 }
 
-func listenToRedis(hub *ws.Hub, cfg *Config) {
-	ctx := context.Background()
-
-	rdb := redis.NewClient(&redis.Options{
-		Addr: cfg.RedisAddr,
-	})
-
+func listenToRedis(ctx context.Context, rdb *redis.Client, hub *ws.Hub, cfg *Config) {
 	pubsub := rdb.Subscribe(ctx, cfg.RedisChannel)
 	defer pubsub.Close()
 

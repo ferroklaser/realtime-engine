@@ -48,7 +48,28 @@ func ReadFromStream(ctx context.Context, rdb *redis.Client, stream string, limit
 		return nil, err
 	}
 
-	for message := range msgs {
+	var messages []types.Message
 
+	for _, msg := range msgs {
+
+		payload, ok := msg.Values["payload"].(string)
+
+		if !ok {
+			log.Printf("Redis unable to cast payload")
+			continue
+		}
+
+		var message types.Message
+		err2 := json.Unmarshal([]byte(payload), &message)
+
+		if err2 != nil {
+			log.Printf("Redis unmarshalling error: %v", err2)
+			continue
+		}
+
+		message.ID = msg.ID
+		messages = append(messages, message)
 	}
+
+	return messages, nil
 }
