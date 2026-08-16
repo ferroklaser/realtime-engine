@@ -11,7 +11,7 @@ const (
 )
 
 type Command struct {
-	Type    string          `json:"type"`
+	Type    CommandType     `json:"type"`
 	Channel string          `json:"channel"`
 	Data    json.RawMessage `json:"data,omitempty"`
 }

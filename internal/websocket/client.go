@@ -28,15 +28,34 @@ func (client *Client) ReadPump() {
 			break
 		}
 
-		var message types.Message
-		err2 := json.Unmarshal(jsonData, &message)
+		var command types.Command
+		err2 := json.Unmarshal(jsonData, &command)
 
 		if err2 != nil {
 			log.Printf("Error unmarshaling JSON: %s", err2)
 		}
 
-		log.Printf("Server received: message")
-		client.Hub.Broadcasts <- message
+		switch command.Type {
+		case types.CommandMessage:
+			message := types.Message{
+				Channel: command.Channel,
+				Data:    command.Data,
+			}
+
+			client.Hub.Broadcasts <- message
+
+		case types.CommandSubscribe:
+
+		case types.CommandUnsubscribe:
+
+		default:
+		}
+
+		// var message types.Message
+		// err2 := json.Unmarshal(jsonData, &message)
+
+		// log.Printf("Server received: message")
+		// client.Hub.Broadcasts <- message
 	}
 }
 
