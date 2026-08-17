@@ -17,7 +17,7 @@ func SaveToStream(ctx context.Context, rdb *redis.Client, stream string, msg typ
 		return err
 	}
 
-	_, err2 := rdb.XAdd(
+	_, err = rdb.XAdd(
 		ctx,
 		&redis.XAddArgs{
 			Stream: stream,
@@ -26,9 +26,9 @@ func SaveToStream(ctx context.Context, rdb *redis.Client, stream string, msg typ
 			},
 		}).Result()
 
-	if err2 != nil {
+	if err != nil {
 		log.Println("Error adding to stream")
-		return err2
+		return err
 	}
 
 	return nil
@@ -60,10 +60,10 @@ func ReadFromStream(ctx context.Context, rdb *redis.Client, stream string, limit
 		}
 
 		var message types.Message
-		err2 := json.Unmarshal([]byte(payload), &message)
+		err = json.Unmarshal([]byte(payload), &message)
 
-		if err2 != nil {
-			log.Printf("Redis unmarshalling error: %v", err2)
+		if err == nil {
+			log.Printf("Redis unmarshalling error: %v", err)
 			continue
 		}
 

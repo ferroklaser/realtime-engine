@@ -117,16 +117,16 @@ func listenToRedis(ctx context.Context, rdb *redis.Client, hub *ws.Hub, cfg *Con
 		}
 
 		var message types.Message
-		err2 := json.Unmarshal([]byte(msg.Payload), &message)
+		err = json.Unmarshal([]byte(msg.Payload), &message)
 
-		if err2 != nil {
-			log.Printf("Redis unmarshalling error: %v", err2)
+		if err != nil {
+			log.Printf("Redis unmarshalling error: %v", err)
 			continue
 		}
 
-		err3 := streams.SaveToStream(ctx, rdb, cfg.RedisStream, message)
-		if err3 != nil {
-			log.Printf("Redis stream saving error: %v", err3)
+		err = streams.SaveToStream(ctx, rdb, cfg.RedisStream, message)
+		if err != nil {
+			log.Printf("Redis stream saving error: %v", err)
 		}
 
 		hub.Broadcasts <- message

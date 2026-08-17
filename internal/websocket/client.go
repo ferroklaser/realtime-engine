@@ -29,10 +29,10 @@ func (client *Client) ReadPump() {
 		}
 
 		var command types.Command
-		err2 := json.Unmarshal(jsonData, &command)
+		err = json.Unmarshal(jsonData, &command)
 
-		if err2 != nil {
-			log.Printf("Error unmarshaling JSON: %s", err2)
+		if err != nil {
+			log.Printf("Error unmarshaling JSON: %s", err)
 		}
 
 		switch command.Type {
@@ -83,9 +83,9 @@ func (client *Client) WritePump() {
 			log.Printf("Error marshaling JSON: %v", err)
 		}
 
-		err2 := client.Conn.WriteMessage(websocket.TextMessage, jsonData)
+		err = client.Conn.WriteMessage(websocket.TextMessage, jsonData)
 
-		if err2 != nil {
+		if err != nil {
 			return
 		}
 	}
