@@ -51,6 +51,28 @@ func (hub *Hub) Run() {
 
 			hub.ClientChannels[request.Client][request.Channel] = true
 
+		case request := <-hub.Unsubscribe:
+
+			clients, ok := hub.Channels[request.Channel]
+
+			if ok {
+				delete(clients, request.Client)
+
+				if len(clients) == 0 {
+					delete(hub.Channels, request.Channel)
+				}
+			}
+
+			channels, ok := hub.ClientChannels[request.Client]
+
+			if ok {
+				delete(channels, request.Channel)
+
+				if len(channels) == 0 {
+					delete(hub.ClientChannels, request.Client)
+				}
+			}
+
 		case client := <-hub.Register:
 			hub.Clients[client] = true
 			log.Println("Client registered!")

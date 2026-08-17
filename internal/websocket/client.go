@@ -51,14 +51,17 @@ func (client *Client) ReadPump() {
 			}
 
 			client.Hub.Subscribe <- subscribeRequest
+
+		case types.CommandUnsubscribe:
+			unsubscribeRequest := SubscriptionRequest{
+				Client:  client,
+				Channel: command.Channel,
+			}
+
+			client.Hub.Unsubscribe <- unsubscribeRequest
+
 		default:
 		}
-
-		// var message types.Message
-		// err2 := json.Unmarshal(jsonData, &message)
-
-		// log.Printf("Server received: message")
-		// client.Hub.Broadcasts <- message
 	}
 }
 
