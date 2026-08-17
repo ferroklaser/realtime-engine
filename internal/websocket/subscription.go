@@ -1,6 +1,6 @@
 package websocket
 
-type SubscribeRequest struct {
+type SubscriptionRequest struct {
 	Client  *Client
 	Channel string
 }

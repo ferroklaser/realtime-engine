@@ -45,9 +45,12 @@ func (client *Client) ReadPump() {
 			client.Hub.Broadcasts <- message
 
 		case types.CommandSubscribe:
+			subscribeRequest := SubscriptionRequest{
+				Client:  client,
+				Channel: command.Channel,
+			}
 
-		case types.CommandUnsubscribe:
-
+			client.Hub.Subscribe <- subscribeRequest
 		default:
 		}
 
