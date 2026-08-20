@@ -72,6 +72,15 @@ func (hub *Hub) Run() {
 		case client := <-hub.UnRegister:
 			if _, ok := hub.Clients[client]; ok {
 
+				for channel := range hub.ClientChannels[client] {
+					delete(hub.Channels[channel], client)
+
+					if len(hub.Channels[channel]) == 0 {
+						delete(hub.Channels, channel)
+					}
+				}
+
+				delete(hub.ClientChannels, client)
 				delete(hub.Clients, client)
 				close(client.Send)
 			}
