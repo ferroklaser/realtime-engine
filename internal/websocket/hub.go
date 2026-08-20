@@ -35,17 +35,13 @@ func (hub *Hub) Run() {
 	for {
 		select {
 		case request := <-hub.Subscribe:
-			_, ok := hub.Channels[request.Channel]
-
-			if !ok {
+			if _, ok := hub.Channels[request.Channel]; !ok {
 				hub.Channels[request.Channel] = make(map[*Client]bool)
 			}
 
 			hub.Channels[request.Channel][request.Client] = true
 
-			_, ok = hub.ClientChannels[request.Client]
-
-			if !ok {
+			if _, ok := hub.ClientChannels[request.Client]; !ok {
 				hub.ClientChannels[request.Client] = make(map[string]bool)
 			}
 
@@ -53,9 +49,7 @@ func (hub *Hub) Run() {
 
 		case request := <-hub.Unsubscribe:
 
-			clients, ok := hub.Channels[request.Channel]
-
-			if ok {
+			if clients, ok := hub.Channels[request.Channel]; ok {
 				delete(clients, request.Client)
 
 				if len(clients) == 0 {
@@ -63,9 +57,7 @@ func (hub *Hub) Run() {
 				}
 			}
 
-			channels, ok := hub.ClientChannels[request.Client]
-
-			if ok {
+			if channels, ok := hub.ClientChannels[request.Client]; ok {
 				delete(channels, request.Channel)
 
 				if len(channels) == 0 {
@@ -79,6 +71,7 @@ func (hub *Hub) Run() {
 
 		case client := <-hub.UnRegister:
 			if _, ok := hub.Clients[client]; ok {
+
 				delete(hub.Clients, client)
 				close(client.Send)
 			}
