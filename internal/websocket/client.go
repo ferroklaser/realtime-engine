@@ -28,15 +28,36 @@ func (client *Client) ReadPump() {
 			break
 		}
 
-		var message types.Message
-		err2 := json.Unmarshal(jsonData, &message)
+		var command types.Command
+		err = json.Unmarshal(jsonData, &command)
 
-		if err2 != nil {
-			log.Printf("Error unmarshaling JSON: %s", err2)
+		switch command.Type {
+		case types.CommandMessage:
+			message := types.Message{
+				Channel: command.Channel,
+				Data:    command.Data,
+			}
+
+			client.Hub.Broadcasts <- message
+
+		case types.CommandSubscribe:
+			subscribeRequest := SubscriptionRequest{
+				Client:  client,
+				Channel: command.Channel,
+			}
+
+			client.Hub.Subscribe <- subscribeRequest
+
+		case types.CommandUnsubscribe:
+			unsubscribeRequest := SubscriptionRequest{
+				Client:  client,
+				Channel: command.Channel,
+			}
+
+			client.Hub.Unsubscribe <- unsubscribeRequest
+
+		default:
 		}
-
-		log.Printf("Server received: message")
-		client.Hub.Broadcasts <- message
 	}
 }
 
@@ -58,9 +79,9 @@ func (client *Client) WritePump() {
 			log.Printf("Error marshaling JSON: %v", err)
 		}
 
-		err2 := client.Conn.WriteMessage(websocket.TextMessage, jsonData)
+		err = client.Conn.WriteMessage(websocket.TextMessage, jsonData)
 
-		if err2 != nil {
+		if err != nil {
 			return
 		}
 	}
