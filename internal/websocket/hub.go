@@ -35,6 +35,10 @@ func (hub *Hub) Run() {
 	for {
 		select {
 		case request := <-hub.Subscribe:
+			if _, ok := hub.Clients[request.Client]; !ok {
+				continue
+			}
+
 			if _, ok := hub.Channels[request.Channel]; !ok {
 				hub.Channels[request.Channel] = make(map[*Client]bool)
 			}
