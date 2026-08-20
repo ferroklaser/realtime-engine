@@ -34,64 +34,30 @@ func NewHub() *Hub {
 func (hub *Hub) Run() {
 	for {
 		select {
-		case request := <-hub.Subscribe:
-			if _, ok := hub.Clients[request.Client]; !ok {
-				continue
-			}
-
-			if _, ok := hub.Channels[request.Channel]; !ok {
-				hub.Channels[request.Channel] = make(map[*Client]bool)
-			}
-
-			hub.Channels[request.Channel][request.Client] = true
-
-			if _, ok := hub.ClientChannels[request.Client]; !ok {
-				hub.ClientChannels[request.Client] = make(map[string]bool)
-			}
-
-			hub.ClientChannels[request.Client][request.Channel] = true
-
-		case request := <-hub.Unsubscribe:
-
-			if clients, ok := hub.Channels[request.Channel]; ok {
-				delete(clients, request.Client)
-
-				if len(clients) == 0 {
-					delete(hub.Channels, request.Channel)
-				}
-			}
-
-			if channels, ok := hub.ClientChannels[request.Client]; ok {
-				delete(channels, request.Channel)
-
-				if len(channels) == 0 {
-					delete(hub.ClientChannels, request.Client)
-				}
-			}
-
 		case client := <-hub.Register:
-			hub.Clients[client] = true
-			log.Println("Client registered!")
+			hub.registerClient(client)
 
 		case client := <-hub.UnRegister:
-			hub.UnregisterClient(client)
+			hub.unregisterClient(client)
+
+		case request := <-hub.Subscribe:
+			hub.handleSubscribe(request)
+
+		case request := <-hub.Unsubscribe:
+			hub.handleUnsubscribe(request)
 
 		case msg := <-hub.Broadcasts:
-			log.Printf("Hub is broadcasting")
-
-			for client := range hub.Channels[msg.Channel] {
-				select {
-				case client.Send <- msg:
-					//Message successful
-				default:
-					hub.UnregisterClient(client)
-				}
-			}
+			hub.handleBroadcast(msg)
 		}
 	}
 }
 
-func (hub *Hub) UnregisterClient(client *Client) {
+func (hub *Hub) registerClient(client *Client) {
+	hub.Clients[client] = true
+	log.Println("Client registered!")
+}
+
+func (hub *Hub) unregisterClient(client *Client) {
 	if _, ok := hub.Clients[client]; ok {
 		for channel := range hub.ClientChannels[client] {
 			delete(hub.Channels[channel], client)
@@ -103,5 +69,54 @@ func (hub *Hub) UnregisterClient(client *Client) {
 		delete(hub.ClientChannels, client)
 		delete(hub.Clients, client)
 		close(client.Send)
+	}
+}
+
+func (hub *Hub) handleSubscribe(request SubscriptionRequest) {
+	if _, ok := hub.Clients[request.Client]; !ok {
+		return
+	}
+
+	if _, ok := hub.Channels[request.Channel]; !ok {
+		hub.Channels[request.Channel] = make(map[*Client]bool)
+	}
+
+	hub.Channels[request.Channel][request.Client] = true
+
+	if _, ok := hub.ClientChannels[request.Client]; !ok {
+		hub.ClientChannels[request.Client] = make(map[string]bool)
+	}
+
+	hub.ClientChannels[request.Client][request.Channel] = true
+}
+
+func (hub *Hub) handleUnsubscribe(request SubscriptionRequest) {
+	if clients, ok := hub.Channels[request.Channel]; ok {
+		delete(clients, request.Client)
+
+		if len(clients) == 0 {
+			delete(hub.Channels, request.Channel)
+		}
+	}
+
+	if channels, ok := hub.ClientChannels[request.Client]; ok {
+		delete(channels, request.Channel)
+
+		if len(channels) == 0 {
+			delete(hub.ClientChannels, request.Client)
+		}
+	}
+}
+
+func (hub *Hub) handleBroadcast(msg types.Message) {
+	log.Printf("Hub is broadcasting")
+
+	for client := range hub.Channels[msg.Channel] {
+		select {
+		case client.Send <- msg:
+			//Message successful
+		default:
+			hub.unregisterClient(client)
+		}
 	}
 }
