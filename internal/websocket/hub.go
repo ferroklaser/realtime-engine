@@ -74,32 +74,34 @@ func (hub *Hub) Run() {
 			log.Println("Client registered!")
 
 		case client := <-hub.UnRegister:
-			if _, ok := hub.Clients[client]; ok {
-
-				for channel := range hub.ClientChannels[client] {
-					delete(hub.Channels[channel], client)
-
-					if len(hub.Channels[channel]) == 0 {
-						delete(hub.Channels, channel)
-					}
-				}
-
-				delete(hub.ClientChannels, client)
-				delete(hub.Clients, client)
-				close(client.Send)
-			}
+			hub.UnregisterClient(client)
 
 		case msg := <-hub.Broadcasts:
 			log.Printf("Hub is broadcasting")
-			for client := range hub.Clients {
+
+			for client := range hub.Channels[msg.Channel] {
 				select {
 				case client.Send <- msg:
 					//Message successful
 				default:
-					close(client.Send)
-					delete(hub.Clients, client)
+					hub.UnregisterClient(client)
 				}
 			}
 		}
+	}
+}
+
+func (hub *Hub) UnregisterClient(client *Client) {
+	if _, ok := hub.Clients[client]; ok {
+		for channel := range hub.ClientChannels[client] {
+			delete(hub.Channels[channel], client)
+
+			if len(hub.Channels[channel]) == 0 {
+				delete(hub.Channels, channel)
+			}
+		}
+		delete(hub.ClientChannels, client)
+		delete(hub.Clients, client)
+		close(client.Send)
 	}
 }
