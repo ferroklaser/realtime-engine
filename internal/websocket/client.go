@@ -31,10 +31,6 @@ func (client *Client) ReadPump() {
 		var command types.Command
 		err = json.Unmarshal(jsonData, &command)
 
-		if err != nil {
-			log.Printf("Error unmarshaling JSON: %s", err)
-		}
-
 		switch command.Type {
 		case types.CommandMessage:
 			message := types.Message{

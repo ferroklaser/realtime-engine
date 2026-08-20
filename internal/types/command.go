@@ -5,7 +5,7 @@ import "encoding/json"
 type CommandType string
 
 const (
-	CommandSubscribe   CommandType = "subcribe"
+	CommandSubscribe   CommandType = "subscribe"
 	CommandUnsubscribe CommandType = "unsubscribe"
 	CommandMessage     CommandType = "message"
 )
