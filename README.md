@@ -1,62 +1,204 @@
+
 # Beacon : Realtime Engine
 
 ## About
 
-Beacon is a real-time broadcasting service. I built this project as a way to learn **Go**, **Websockets** and **Docker** by designing a decoupled **Event-Driven Architecture** using **Redis**.
+Beacon is a real-time messaging and broadcasting service built with **Go**, **WebSockets**, **Redis**, and **Docker**.
+
+I built Beacon to explore concurrent backend engineering and event-driven architecture, including WebSocket connection management, selective message fanout, Redis-based event delivery, and durable message history.
+
+The service uses **Redis Pub/Sub** for ephemeral real-time delivery and **Redis Streams** for durable message history, while a concurrent Go WebSocket hub manages connected clients and channel subscriptions.
 
 ## 🧠 Core Concepts & Key Takeaways
 
-### 1. Decoupled Architecture (The Event Bridge)
-This service is built as an independent microservice. It is completely separated from the main web application and the primary database (like Express and MongoDB).
-* **How it communicates:** Instead of talking directly to other apps, it uses **Redis Pub/Sub** as a middleman.
-* **The Flow:** The main backend acts as the *producer* (publishing events to Redis). This Go engine acts as the *consumer* (subscribing to Redis to catch those events). This keeps the apps completely independent—if the backend restarts, the real-time engine keeps running.
+### 1. Decoupled Event-Driven Architecture
 
-### 2. High Concurrency via Go Goroutines
-WebSockets require keeping a continuous, open connection between the browser and the server. Managing thousands of these open links can heavily drain a server's memory.
-* **Why Go:** Runtimes like Node.js can struggle with memory when holding onto thousands of live connections. Go handles this using **Goroutines**—extremely lightweight internal threads.
-* **The Benefit:** Each connection takes up almost zero RAM, allowing this small service to scale easily and handle a massive crowd of active users simultaneously.
+Beacon is designed as an independent real-time service rather than being tightly coupled to a primary web application or database.
 
-### 3. Container Optimization (Multi-Stage Docker)
-To make the application easy to deploy anywhere, the entire engine is containerised using a professional **Multi-Stage Dockerfile**.
-* **Stage 1 (The Builder):** Uses a heavy Go environment to compile the raw code into a single, standalone binary file.
-* **Stage 2 (The Runner):** Throws away the heavy compiler and copies *only* that finished binary into a tiny, secure Alpine Linux image.
-* **The Result:** Because all the unnecessary source code and tools are left behind, the final production image is highly secure and ultra-lightweight (under **20MB**).
+- **Redis Pub/Sub:** Acts as an asynchronous event bridge between message producers and the WebSocket engine.
+- **Independent Components:** Publishers do not need to know which WebSocket clients are connected, while Beacon independently consumes events and delivers them to relevant clients.
+- **Failure Isolation:** Live Pub/Sub delivery and durable Stream persistence are intentionally decoupled so a history write failure does not automatically prevent real-time message delivery.
+
+A simplified message flow looks like:
+
+```text
+Producer
+   │
+   ▼
+Redis Pub/Sub
+   │
+   ▼
+Beacon
+   │
+   ▼
+WebSocket Hub
+   │
+   ▼
+Subscribed Clients
+```
+
+### 2. Concurrent WebSocket Hub
+
+Each WebSocket connection uses separate **ReadPump** and **WritePump** goroutines.
+
+```text
+Client
+├── ReadPump  → receives commands/messages
+└── WritePump → sends messages to the WebSocket
+```
+
+This allows WebSocket reads and writes to progress independently without one connection blocking unrelated clients.
+
+A central **Hub goroutine** owns shared connection and subscription state. Client goroutines communicate with the Hub through Go channels instead of modifying shared maps directly.
+
+The Hub processes events such as:
+
+- Client registration
+- Client disconnection
+- Channel subscription
+- Channel unsubscription
+- Message broadcasting
+
+This follows an event-loop style concurrency model: many goroutines can produce events concurrently, while a single Hub goroutine serialises mutations to shared state.
+
+### 3. Channel Subscriptions & Selective Fanout
+
+Clients can dynamically subscribe and unsubscribe from logical messaging channels over their WebSocket connection.
+
+For example:
+
+```json
+{"type":"subscribe","channel":"sports"}
+```
+
+```json
+{"type":"unsubscribe","channel":"sports"}
+```
+
+The Hub maintains bidirectional subscription indexes:
+
+```text
+Channels
+channel → connected clients
+
+ClientChannels
+client → subscribed channels
+```
+
+This allows Beacon to route a message only to clients subscribed to its channel rather than scanning and broadcasting to every connected client.
+
+```text
+sports message
+      │
+      ▼
+Hub.Channels["sports"]
+      │
+   ┌──┴──┐
+   ▼     ▼
+Client A Client C
+```
+
+Client disconnections also trigger automatic cleanup of all associated channel memberships.
+
+### 4. Redis Pub/Sub for Live Delivery
+
+Redis Pub/Sub handles ephemeral real-time event delivery.
+
+Beacon subscribes to Redis and forwards incoming messages through the WebSocket Hub to clients subscribed to the corresponding application channel.
+
+Pub/Sub is intentionally used for **live delivery**, not durable storage. If a client is disconnected when an event is published, it cannot recover that event from Pub/Sub alone.
+
+### 5. Redis Streams for Durable History
+
+Beacon also persists messages using **Redis Streams** and `XADD`.
+
+Each stored event receives a Redis Stream ID, which Beacon exposes as `Message.ID`.
+
+This provides durable history alongside the ephemeral Pub/Sub path:
+
+```text
+Message
+   ├──► Redis Pub/Sub → live WebSocket delivery
+   │
+   └──► Redis Stream  → durable history
+```
+
+The `/history` API allows clients to retrieve previously stored messages after reconnecting.
+
+### 6. History Filtering & Cursor Pagination (In Progress)
+
+The history API supports retrieving messages by channel and navigating message history using Redis Stream IDs as cursors.
+
+Instead of repeatedly requesting only the latest fixed set of messages, clients can paginate through history using `before` and `after` cursors.
+
+Supported capabilities:
+
+- Filter history by channel
+- Limit the number of returned messages
+- Use `Message.ID` (Redis Stream ID) as a pagination cursor
+- Load older messages using `before`
+- Load newer messages using `after`
+
+Examples:
+
+```text
+GET /history?channel=sports&limit=20
+
+GET /history?channel=sports&limit=20&before=<stream-id>
+
+GET /history?channel=sports&limit=20&after=<stream-id>
+```
+
+This allows clients to incrementally load message history without repeatedly fetching the same latest messages.
+
+### 7. Container Optimization
+
+Beacon is containerized using a **multi-stage Docker build**.
+
+- **Builder Stage:** Uses the Go toolchain to compile the application into a standalone binary.
+- **Runtime Stage:** Copies only the compiled binary and required runtime files into a lightweight Alpine Linux image.
+- **Result:** The final production image remains under **20 MB**, reducing deployment size and unnecessary runtime tooling.
 
 ## 📂 Project Structure
+
 ```text
 realtime-engine/
 ├── cmd/
 │   └── server/
-│       └── main.go       # App entry point, reads configuration & kicks off the server
+│       └── main.go
 ├── internal/
-│   └── websocket/
-│       ├── client.go     # Manages individual reading/writing for each browser socket
-│       └── hub.go        # The "control room" tracking who is connected and broadcasting data
-├── .dockerignore         # Like a .gitignore, keeps local junk out of my Docker image
-├── Dockerfile            # My optimized multi-stage build blueprint
-├── go.mod                # Tracks my project dependencies (like Gorilla WebSocket & Redis drivers)
-└── go.sum                # Security checksums for my dependencies
+│   ├── websocket/
+│   │   ├── client.go
+│   │   ├── hub.go
+│   │   └── subscription.go
+│   └── ...
+├── .dockerignore
+├── Dockerfile
+├── go.mod
+└── go.sum
 ```
 
 ## 🛠️ How to Run and Test Locally
-This project is configured completely through environment variables, keeping development settings separate from my actual code.
 
-1. Start your local Redis Server\
-Ensure Redis is installed on your Mac (installed via Homebrew):
-```
+Beacon is configured using environment variables so runtime configuration remains separate from application code.
+
+### 1. Start Redis
+
+If Redis is installed locally through Homebrew:
+
+```bash
 brew services start redis
 ```
 
-2. Build the Docker Image\
-Compile the Go application into its optimised container setup.
-```
+### 2. Build the Docker Image
+
+```bash
 docker build -t realtime-engine .
 ```
 
-3. Run the Container\
-Boot up the container, securely bridging its internal sandbox to your Mac's native Redis instance using `host.docker.internal`:
+### 3. Run Beacon
 
-```
+```bash
 docker run -p 8080:8080 \
   -e PORT=8080 \
   -e REDIS_ADDR=host.docker.internal:6379 \
@@ -64,18 +206,93 @@ docker run -p 8080:8080 \
   realtime-engine
 ```
 
-4. Connect a Test Client\
-Open a new terminal tab and use `wscat` to mimic a frontend user connecting to the WebSocket layout:
+### 4. Connect WebSocket Clients
 
-```
+Open multiple terminal windows to simulate independent clients:
+
+```bash
 npx wscat --connect ws://localhost:8080/ws
 ```
 
-5. Broadcast a Message\
-Open a third terminal tab, jump into the Redis CLI, and fire a message down the pipeline:
-```
-redis-cli
-PUBLISH global_activity '{"message": "Hello from the database!"}'
+Subscribe one client to `sports`:
+
+```json
+{"type":"subscribe","channel":"sports"}
 ```
 
-Look back at your `wscat` window—you will see the JSON arrive instantly!
+Subscribe another client to `general`:
+
+```json
+{"type":"subscribe","channel":"general"}
+```
+
+### 5. Send a Message
+
+A WebSocket client can publish a message using:
+
+```json
+{
+  "type": "message",
+  "channel": "sports",
+  "data": {
+    "text": "Hello sports!"
+  }
+}
+```
+
+Only clients subscribed to `sports` should receive the resulting live message.
+
+### 6. Test Unsubscription
+
+```json
+{"type":"unsubscribe","channel":"sports"}
+```
+
+Future `sports` messages should no longer be delivered to that connection.
+
+### 7. Retrieve Message History
+
+Retrieve recent history using the `/history` endpoint:
+
+```text
+GET /history?channel=sports&limit=20
+```
+
+Use the returned Redis Stream IDs to paginate through older or newer history:
+
+```text
+GET /history?channel=sports&limit=20&before=<stream-id>
+
+GET /history?channel=sports&limit=20&after=<stream-id>
+```
+
+## 🏗️ Architecture Summary
+
+```text
+                         ┌─────────────────┐
+                         │ Message Producer│
+                         └────────┬────────┘
+                                  │
+                         ┌────────▼────────┐
+                         │      Redis      │
+                         │ Pub/Sub + Stream│
+                         └────────┬────────┘
+                                  │
+                                  ▼
+                         ┌─────────────────┐
+                         │     Beacon      │
+                         │                 │
+                         │ Redis Listener  │
+                         │       │         │
+                         │       ▼         │
+                         │      Hub        │
+                         └───────┬─────────┘
+                                 │
+                     selective fanout
+                        ┌────────┼────────┐
+                        ▼        ▼        ▼
+                     Client A Client B Client C
+```
+
+Beacon separates **live event delivery**, **durable history**, **WebSocket connection management**, and **subscription routing** while using Go's goroutines and channels to coordinate concurrent connections.
+
